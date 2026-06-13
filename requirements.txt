@@ -1,0 +1,42 @@
+# FedInsight - RAG over Federal Reserve Documents
+# Core
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+tqdm>=4.66.0
+python-dotenv>=1.0.0
+
+# PDF parsing
+# PyMuPDF is the primary engine: correctly handles the 2-column FOMC layout.
+pymupdf>=1.24.0
+pypdf>=4.0.0
+pdfplumber>=0.11.0          # optional fallback extractor
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.26.0
+
+# Embeddings
+sentence-transformers>=3.0.0
+# torch powers sentence-transformers (GPU-accelerated when CUDA is available).
+# For an NVIDIA GPU, install the matching CUDA build instead of the default CPU
+# wheel, e.g. for Blackwell (RTX 50-series):
+#   pip install --index-url https://download.pytorch.org/whl/cu128 torch
+torch>=2.2.0
+
+# Vector DB
+# Default backend for local/testing: ChromaDB (no server required)
+chromadb>=0.5.0
+# Production backend: pgvector (PostgreSQL) - requires a running Postgres
+psycopg[binary]>=3.2.0
+pgvector>=0.3.0
+
+# RAG / LLM (we'll use LangChain for convenience, but keep it lightweight)
+langchain>=0.2.0
+langchain-community>=0.2.0
+langchain-text-splitters>=0.2.0
+
+# UI
+streamlit>=1.35.0
+
+# Dev / logging
+loguru>=0.7.0

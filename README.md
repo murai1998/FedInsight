@@ -39,7 +39,7 @@ FedInsight is a complete RAG (Retrieval-Augmented Generation) project that lets 
 ## Quick start
 
 ```bash
-git clone https://github.com/amorosov2006/FedInsight.git
+git clone https://github.com/murai1998/FedInsight.git
 cd FedInsight
 
 python -m venv .venv
@@ -116,37 +116,6 @@ streamlit run app.py
 Then open the URL it prints (usually http://localhost:8501). Pick the backend,
 LLM provider, and number of retrieved chunks in the sidebar.
 
-## How to get the project
-
-### Recommended: Clone from GitHub
-
-```bash
-git clone https://github.com/amorosov2006/FedInsight.git
-cd FedInsight
-```
-
-**Advantages:**
-- Always up-to-date version
-- Easy to work locally
-- You can commit your own changes
-- I can push updates directly to this repository
-
-### Alternative: Download from Grok Sandbox
-
-If you want to grab the files directly from this chat:
-
-1. In the Grok interface, find the **Download / Export / Build** button for the project
-2. Select the `FedInsight/` folder
-3. Download the archive and unzip it
-
-This works but is less convenient than Git.
-
-## Current workflow
-
-- I develop in the sandbox and periodically push changes to your GitHub repository
-- You just `git pull` on your side
-- You can also commit and push yourself anytime
-
 ## Project structure
 
 ```
@@ -188,11 +157,11 @@ FedInsight/
 ## Tech stack
 
 - **Scraping**: requests + BeautifulSoup
-- **PDF parsing**: pypdf / pdfplumber
-- **Embeddings**: sentence-transformers
-- **Vector DB**: pgvector (PostgreSQL)
-- **Orchestration**: LangChain (or clean custom code for learning)
-- **UI**: Streamlit
+- **PDF parsing**: PyMuPDF (column-aware), with pypdf / pdfplumber as fallbacks
+- **Embeddings**: sentence-transformers (`all-MiniLM-L6-v2`, auto CUDA)
+- **Vector DB**: ChromaDB (default, local) **or** pgvector (PostgreSQL)
+- **LLM**: OpenAI, local Ollama, or offline excerpts-only fallback
+- **UI**: Streamlit (deployed to Hugging Face Spaces via Docker)
 - **Logging**: loguru
 
 ## Development philosophy
@@ -201,20 +170,21 @@ We follow a **working skeleton first** approach:
 1. Build a minimal but complete end-to-end pipeline (scrape → parse → chunk → embed → store → retrieve → generate)
 2. Then iteratively improve quality, features, and robustness.
 
-## How to continue development
+## Roadmap
 
-Just write messages like:
-- "Continue FedInsight"
-- "Improve the scraper"
-- "Build the PDF parser"
-- "Add Beige Book scraper"
-- "Create the pgvector store"
-- "Build Streamlit interface"
+See [plan.md](plan.md) for the detailed, prioritized next steps. In short:
+retrieval-quality evaluation, hybrid search + reranking, richer metadata
+filtering in the UI, additional document types (Beige Book, speeches, SEP),
+and a test suite.
 
-I will work inside the `FedInsight/` folder, keep everything in English, and push updates to your repository.
+## Contributing
+
+Issues and pull requests are welcome at
+[github.com/murai1998/FedInsight](https://github.com/murai1998/FedInsight).
+Keep everything in English; lint with `python -m ruff check src scripts app.py`.
 
 ---
 
 Made with love for monetary policy and clean code ❤️
 
-*Learning project: building a full RAG + Vector DB system from scratch.*
+*A full RAG + Vector DB system over Federal Reserve communications.*

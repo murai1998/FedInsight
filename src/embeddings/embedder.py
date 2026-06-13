@@ -32,22 +32,33 @@ DEFAULT_BATCH_SIZE_GPU = 256
 DEFAULT_BATCH_SIZE_CPU = 32
 
 
+def _mps_available() -> bool:
+    """True on Apple Silicon Macs with a working Metal (MPS) backend."""
+    backend = getattr(torch.backends, "mps", None)
+    return bool(backend) and backend.is_available()
+
+
 def resolve_device(device: str = "auto") -> str:
     """
     Resolve the compute device.
 
     Args:
-        device: "auto" (use CUDA if available), "cuda", or "cpu"
+        device: "auto" (CUDA, then Apple MPS, then CPU), "cuda", "mps", or "cpu"
 
     Returns:
-        "cuda" or "cpu"
+        "cuda", "mps", or "cpu"
     """
     if device in (None, "auto"):
         if torch.cuda.is_available():
             return "cuda"
+        if _mps_available():  # Apple Silicon GPU (MacBook Pro M-series)
+            return "mps"
         return "cpu"
     if device == "cuda" and not torch.cuda.is_available():
         logger.warning("CUDA requested but not available; falling back to CPU")
+        return "cpu"
+    if device == "mps" and not _mps_available():
+        logger.warning("MPS requested but not available; falling back to CPU")
         return "cpu"
     return device
 
@@ -63,7 +74,9 @@ class Embedder:
         """
         self.device = resolve_device(device)
         self.batch_size = (
-            DEFAULT_BATCH_SIZE_GPU if self.device == "cuda" else DEFAULT_BATCH_SIZE_CPU
+            DEFAULT_BATCH_SIZE_GPU
+            if self.device in ("cuda", "mps")
+            else DEFAULT_BATCH_SIZE_CPU
         )
 
         if self.device == "cuda":
@@ -71,6 +84,8 @@ class Embedder:
                 f"Loading embedding model: {model_name} on cuda "
                 f"({torch.cuda.get_device_name(0)})"
             )
+        elif self.device == "mps":
+            logger.info(f"Loading embedding model: {model_name} on mps (Apple Silicon GPU)")
         else:
             logger.info(f"Loading embedding model: {model_name} on cpu")
 

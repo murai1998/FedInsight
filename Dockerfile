@@ -9,8 +9,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Caches that must be writable at runtime. HF model downloads go to HF_HOME.
-ENV HF_HOME=/app/.cache/huggingface \
+# The Space ships a prebuilt Chroma store and has no Postgres, so pin the
+# backend to chroma here (the project default is pgvector for local use).
+ENV VECTOR_BACKEND=chroma \
+    # Caches that must be writable at runtime. HF model downloads go to HF_HOME.
+    HF_HOME=/app/.cache/huggingface \
     XDG_CACHE_HOME=/app/.cache \
     STREAMLIT_SERVER_PORT=7860 \
     STREAMLIT_SERVER_ADDRESS=0.0.0.0 \

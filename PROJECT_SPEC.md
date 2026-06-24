@@ -2,137 +2,118 @@
 
 ## 1. Project Goal
 
-Build a production-grade RAG system for working with Federal Reserve documents.
+A RAG (Retrieval-Augmented Generation) system for working with U.S. Federal
+Reserve communications. It:
 
-The system should be able to:
-- Collect documents (FOMC Minutes, Beige Book, Speeches, SEP, etc.)
-- Turn them into a searchable knowledge base
-- Answer questions with accurate quotes and sources
-- Work fully locally (or easily switchable to API)
+- Collects Fed documents (FOMC Minutes today; Beige Book, speeches, SEP planned)
+- Turns them into a searchable vector knowledge base
+- Answers natural-language questions with accurate quotes and source attribution
+- Runs fully locally (no mandatory API keys), or switches to a hosted LLM
 
-**Тarget audience**: quants, economists, traders, students, and monetary policy researchers.
+**Target audience**: quants, economists, traders, students, and monetary-policy
+researchers.
 
 ## 2. High-level Architecture
 
 ```
-Raw Documents (PDF/HTML)
-        ↓
+Raw PDFs (federalreserve.gov)
+        ↓  src/scraper/        requests + BeautifulSoup
    Scraper Layer
-        ↓
+        ↓  src/parser/         PyMuPDF (column-aware), pdfplumber fallback
    Parser + Cleaner
-        ↓
-   Chunker (semantic / recursive)
-        ↓
-   Embedder (sentence-transformers)
-        ↓
-   Vector Store (pgvector)
-        ↓
-   Retriever (similarity + metadata filter)
-        ↓
-   RAG Pipeline (context + query → LLM)
-        ↓
-   Streamlit UI / API
+        ↓  src/chunker/        RecursiveCharacterTextSplitter
+   Chunker
+        ↓  src/embeddings/     sentence-transformers (CUDA / Apple MPS / CPU)
+   Embedder
+        ↓  src/vectorstore/    pgvector (default) | ChromaDB
+   Vector Store
+        ↓  src/rag/retriever   cosine top-k + metadata filter
+   Retriever
+        ↓  src/rag/rag_pipeline grounded prompt → LLM, cited sources
+   RAG Pipeline
+        ↓  app.py              Streamlit chat UI
+   UI
 ```
 
-### Components
+### Components & status
 
-| Layer                | Technology                     | Status     | Location                  |
-|----------------------|--------------------------------|------------|---------------------------|
-| Scraper              | requests + BeautifulSoup       | In progress| src/scraper/              |
-| Parser               | pypdf / pdfplumber             | Planned    | src/parser/               |
-| Chunker              | LangChain or custom            | Planned    | src/chunker/              |
-| Embeddings           | sentence-transformers          | Planned    | src/embeddings/           |
-| Vector DB            | pgvector (PostgreSQL)          | Planned    | src/vectorstore/          |
-| RAG Orchestration    | LangChain / custom             | Planned    | src/rag/                  |
-| UI                   | Streamlit                      | Planned    | src/ui/                   |
-| Evaluation           | custom + RAGAS (optional)      | Planned    | src/eval/                 |
+| Layer             | Technology                          | Status | Location              |
+|-------------------|-------------------------------------|--------|-----------------------|
+| Scraper           | requests + BeautifulSoup            | ✅ FOMC Minutes | `src/scraper/`   |
+| Parser            | PyMuPDF (+ pdfplumber fallback)     | ✅     | `src/parser/`         |
+| Chunker           | langchain-text-splitters            | ✅     | `src/chunker/`        |
+| Embeddings        | sentence-transformers `all-MiniLM-L6-v2` | ✅ | `src/embeddings/`     |
+| Vector DB         | pgvector (default) / ChromaDB       | ✅     | `src/vectorstore/`    |
+| Retriever         | cosine top-k + metadata filter      | ✅     | `src/rag/retriever.py`|
+| RAG pipeline      | OpenAI / Ollama / offline fallback  | ✅     | `src/rag/`            |
+| UI                | Streamlit                           | ✅     | `app.py`              |
+| Deployment        | Docker → Hugging Face Spaces        | ✅     | `Dockerfile`          |
+| Evaluation        | retrieval metrics + RAGAS (optional)| ⬜ planned | `eval/` (planned) |
+| Test suite        | pytest                              | ⬜ planned | `tests/` (planned)|
 
 ## 3. Data
 
-### Main sources (priority)
+### Sources (priority order)
 
-1. **FOMC Minutes** — most important (8 times per year + extraordinary meetings)
-2. **Beige Book** — regional economic conditions (8 times per year)
-3. **FOMC Speeches** — speeches by FOMC members
-4. **Summary of Economic Projections (SEP)**
-5. **Monetary Policy Report** (semiannual)
-6. **Financial Stability Report**
+1. **FOMC Minutes** — implemented (8 regular meetings/year + extraordinary)
+2. **Beige Book** — planned
+3. **FOMC Speeches** — planned
+4. **Summary of Economic Projections (SEP)** — planned
+5. **Monetary Policy Report**, **Financial Stability Report** — later
 
-### Storage format
+### Storage layout
 
-- `data/raw/fomc_minutes/YYYY-MM-DD_fomc_minutes.pdf`
-- `data/processed/fomc_minutes/YYYY-MM-DD.json` (text + metadata)
-- PostgreSQL database with pgvector extension for embeddings
+- `data/raw/fomc_minutes/YYYY-MM-DD_fomc_minutes.pdf` — downloaded PDFs
+- `data/processed/…` — scraper metadata + logs
+- Vectors: PostgreSQL/pgvector table `fed_chunks` (default), or on-disk Chroma
+  at `data/chroma/` (used by the shipped/Hugging Face build)
 
-**Minimum metadata**:
-- `meeting_date`
-- `release_date`
-- `document_type`
-- `url`
-- `title`
-- `participants` (if extractable)
+**Chunk metadata** (carried end-to-end into search results): `meeting_date`,
+`release_date`, `document_type`, `pdf_url`, `chunk_index`, `total_chunks`.
 
-## 4. Development Roadmap
+> **Note:** the repo ships a prebuilt Chroma store (~4,075 FOMC chunks) but no
+> source PDFs. `scripts/migrate_chroma_to_pgvector.py` copies those vectors into
+> pgvector, so you get the full knowledge base without re-scraping.
 
-### Phase 0 — Initialization (current)
-- [x] Project structure
-- [x] README + PROJECT_SPEC (English)
-- [x] requirements.txt
-- [x] FOMC Minutes scraper (improved version)
+## 4. Vector backends
 
-### Phase 1 — Skeleton (priority right now)
-Build a **working end-to-end pipeline** as fast as possible:
-- PDF parser
-- Simple chunker
-- Embeddings
-- pgvector storage + retrieval
-- Basic RAG query (CLI or simple script)
-- Then we improve quality and add features
+Two interchangeable backends implement one interface (`src/vectorstore/base.py`),
+selected by `VECTOR_BACKEND`:
 
-### Phase 2 — Core improvements
-- Better PDF text extraction and cleaning
-- Semantic chunking
-- Metadata filtering in pgvector
-- Proper prompt engineering with source attribution
-
-### Phase 3 — Full features
-- Beige Book + Speeches scrapers
-- Streamlit interface
-- Hybrid search / reranking
-- Evaluation framework
-
-### Phase 4 — Production touches (later)
-- Caching
-- Incremental updates
-- Docker compose for easy local Postgres + pgvector
-- Advanced RAG techniques (query rewriting, multi-step reasoning, etc.)
+- **pgvector (default)** — PostgreSQL + pgvector. Strong metadata filtering
+  (JSONB `@>`), SQL power, production-ready. Start locally with
+  `docker compose up -d` (see `docker-compose.yml`).
+- **ChromaDB** — server-less, on-disk. Zero setup; used by the Hugging Face
+  Space, which pins `VECTOR_BACKEND=chroma` in the `Dockerfile`.
 
 ## 5. Technical decisions
 
-### Why pgvector?
-- More production-ready than Chroma for many use cases
-- Excellent metadata filtering + SQL power
-- You can run it locally with Docker or use managed services (Supabase, Neon, etc.)
-- Good performance and ecosystem
+- **Embeddings**: `all-MiniLM-L6-v2` (384-dim, fast). The embedder auto-selects
+  the fastest device — **CUDA → Apple MPS → CPU** — and normalizes vectors for
+  cosine similarity. Upgrade path: `bge-*` / `e5-*` (re-ingest required).
+- **LLM**: provider is `auto` — OpenAI if `OPENAI_API_KEY` is set, else a local
+  Ollama server if reachable, else `none` (returns retrieved excerpts, fully
+  offline). See `src/rag/llm.py`.
+- **Chunking**: 800-char chunks, 150-char overlap (tunable via ingest flags).
 
-### Embeddings
-We start with `sentence-transformers/all-MiniLM-L6-v2` (fast, 384 dim).  
-Later we can upgrade to better models (`bge-m3`, `e5-large`, etc.).
+## 6. Development Roadmap
 
-### LLM
-- Development: Grok, Claude 3.5, or GPT-4o
-- Production/local: Llama-3.1, Qwen2, Mistral, etc. via Ollama or vLLM
+- **Phase 0 — Initialization** ✅ structure, scraper, requirements, docs
+- **Phase 1 — End-to-end skeleton** ✅ parse → chunk → embed → store → retrieve → generate, both backends, Streamlit UI, Docker deploy
+- **Phase 2 — Retrieval quality** ⬜ eval harness, hybrid (dense+BM25) search, reranking, better chunking *(see `plan.md`)*
+- **Phase 3 — UX & trust** ⬜ source links/snippets, metadata filters in UI, faithfulness guardrails *(see `plan.md`)*
+- **Phase 4 — Coverage & hardening** ⬜ more document types, incremental ingest, test suite, input/SQL hardening *(see `plan.md`)*
 
-## 6. Project principles
+## 7. Project principles
 
-- **Skeleton first**: Get a working end-to-end flow before polishing individual parts
-- **Observable**: Good logging and progress bars
-- **Resumable**: Scrapers and pipelines should support resuming
-- **Clean & educational**: Code should be readable and well-documented
-- **English only**: All code, comments, docs, and messages are in English
+- **Skeleton first**: a working end-to-end flow before polishing parts (done).
+- **Observable**: good logging and progress bars (loguru + tqdm).
+- **Resumable**: scrapers and pipelines support resuming.
+- **Interchangeable backends**: nothing above the vector store knows which DB is in use.
+- **Clean & educational**: readable, well-documented code; English only.
 
 ---
 
-**Сurrent status**: Phase 0 → Phase 1 (building the PDF parser and moving toward end-to-end skeleton)
-
-Ready when you are. Just say the word.
+**Current status**: Phase 1 complete (end-to-end RAG on pgvector by default).
+Next: Phase 2 retrieval quality. See [plan.md](plan.md) for the detailed,
+prioritized next steps.

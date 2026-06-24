@@ -70,32 +70,43 @@ Optional configuration lives in `.env` (copy from `.env.example`):
 cp .env.example .env   # then edit as needed (vector backend, LLM provider, keys)
 ```
 
-### 1. Scrape FOMC minutes (downloads PDFs + metadata)
+### 1. Start the vector database (pgvector, the default backend)
 
 ```bash
-python src/scraper/fomc_minutes_scraper.py            # full historical scrape
-python src/scraper/fomc_minutes_scraper.py --years 2022 2023 2024
+docker compose up -d        # PostgreSQL + pgvector on localhost:5432
 ```
 
-### 2. Ingest: parse → chunk → embed → store in the vector DB
+### 2. Load the knowledge base (fast path — no scraping)
+
+The repo ships a prebuilt Chroma store (~4,075 FOMC chunks) but no source PDFs,
+so the quickest way to a working knowledge base is to copy those vectors into
+pgvector:
 
 ```bash
-python scripts/ingest_sample.py --clear               # ingest everything (fresh)
+python scripts/migrate_chroma_to_pgvector.py --clear
+```
+
+### 3. (Optional) Build the knowledge base from scratch
+
+Only needed to add new documents or re-ingest. Scrape, then ingest:
+
+```bash
+python src/scraper/fomc_minutes_scraper.py            # downloads PDFs + metadata
+python scripts/ingest_sample.py --clear               # parse → chunk → embed → store
 python scripts/ingest_sample.py --limit 5             # quick test on 5 docs
-python scripts/ingest_sample.py --backend chroma      # force a backend
 ```
 
-Default backend is **ChromaDB** (local, no server). To use **pgvector**, set
-`VECTOR_BACKEND=pgvector` in `.env` and point it at a running Postgres.
+Default backend is **pgvector**. To use the server-less **ChromaDB** instead
+(no Docker), set `VECTOR_BACKEND=chroma` in `.env` (or pass `--backend chroma`).
 
-### 3a. Simple semantic search (retrieval only, no LLM)
+### 4a. Simple semantic search (retrieval only, no LLM)
 
 ```bash
 python scripts/query.py "What did the Fed say about inflation in 2023?"
 python scripts/query.py "labor market" --k 10
 ```
 
-### 3b. Ask a question (full RAG: retrieval + generated answer + sources)
+### 4b. Ask a question (full RAG: retrieval + generated answer + sources)
 
 ```bash
 python scripts/ask.py "How did the Committee view inflation risks in 2022?"
@@ -107,7 +118,7 @@ The LLM provider is set by `LLM_PROVIDER` (default `auto`): OpenAI if
 `OPENAI_API_KEY` is set, else a local Ollama server if reachable, else `none`
 (prints the most relevant excerpts — works fully offline, no keys required).
 
-### 4. Chat UI (Streamlit)
+### 5. Chat UI (Streamlit)
 
 ```bash
 streamlit run app.py
@@ -159,7 +170,7 @@ FedInsight/
 - **Scraping**: requests + BeautifulSoup
 - **PDF parsing**: PyMuPDF (column-aware), with pypdf / pdfplumber as fallbacks
 - **Embeddings**: sentence-transformers (`all-MiniLM-L6-v2`, auto CUDA)
-- **Vector DB**: ChromaDB (default, local) **or** pgvector (PostgreSQL)
+- **Vector DB**: pgvector (PostgreSQL, default via `docker compose`) **or** ChromaDB (server-less)
 - **LLM**: OpenAI, local Ollama, or offline excerpts-only fallback
 - **UI**: Streamlit (deployed to Hugging Face Spaces via Docker)
 - **Logging**: loguru

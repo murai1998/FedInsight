@@ -9,8 +9,8 @@ Select the backend with the VECTOR_BACKEND environment variable, or override
 per call via get_vector_store(backend=...).
 
     from src.vectorstore import get_vector_store
-    store = get_vector_store()              # uses VECTOR_BACKEND (default "chroma")
-    store = get_vector_store("pgvector")    # explicit override
+    store = get_vector_store()              # uses VECTOR_BACKEND (default "pgvector")
+    store = get_vector_store("chroma")      # explicit override
 """
 
 import os
@@ -19,7 +19,10 @@ from typing import Any
 from .base import BaseVectorStore
 
 # Global backend selector. Change the env var (or DEFAULT_BACKEND) to switch.
-DEFAULT_BACKEND = "chroma"
+# Default is pgvector (PostgreSQL); start it locally with `docker compose up -d`.
+# The Hugging Face Space overrides this to "chroma" (see Dockerfile), since it
+# ships a prebuilt Chroma store and has no Postgres server.
+DEFAULT_BACKEND = "pgvector"
 VECTOR_BACKEND = os.getenv("VECTOR_BACKEND", DEFAULT_BACKEND).strip().lower()
 
 
